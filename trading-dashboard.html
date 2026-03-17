@@ -60,6 +60,13 @@
   .hidden { display: none; }
   .chart-container { position: relative; height: 300px; margin-bottom: 16px; }
   .chart-container-sm { height: 200px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: none; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #111827; border: 1px solid #1e293b; border-radius: 10px; padding: 24px; width: 420px; max-width: 90vw; }
+  .modal h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+  .modal .close-preview { font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; padding: 8px 12px; background: #0a0e17; border-radius: 6px; margin-bottom: 14px; }
+  .close-pos-btn { background: none; border: 1px solid #f59e0b44; color: #f59e0b; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; }
+  .close-pos-btn:hover { background: #f59e0b22; }
 </style>
 </head>
 <body>
@@ -168,7 +175,7 @@
       </div>
       <button class="btn btn-primary" onclick="submitPosition()" id="pos-submit-btn">Save Position</button>
     </div>
-    <div style="overflow-x:auto"><table><thead><tr><th>Ticker</th><th>Entry</th><th>Current</th><th>Stop</th><th>Shares</th><th>Unrl%</th><th>Unrl$</th><th>Risk$</th><th>EqRisk</th><th>Sector</th><th>Days</th><th>Earn</th><th></th></tr></thead><tbody id="pos-table"></tbody></table></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Ticker</th><th>Entry</th><th>Current</th><th>Stop</th><th>Shares</th><th>Unrl%</th><th>Unrl$</th><th>Risk$</th><th>EqRisk</th><th>Sector</th><th>Days</th><th>Earn</th><th></th><th></th></tr></thead><tbody id="pos-table"></tbody></table></div>
     <div id="pos-empty" class="empty-state">No open positions. Add your first above.</div>
   </div>
 
@@ -199,6 +206,24 @@
     </div>
   </div>
 
+</div>
+
+<!-- CLOSE POSITION MODAL -->
+<div id="close-modal" class="modal-overlay" onclick="if(event.target===this)closeCloseModal()">
+  <div class="modal">
+    <h3 id="close-modal-title">Close Position</h3>
+    <div id="close-modal-info" style="font-size:12px;color:#94a3b8;margin-bottom:14px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><label class="field-label">Exit Date</label><input type="date" id="close-date"></div>
+      <div><label class="field-label">Exit Price</label><input type="number" step="0.01" id="close-price" oninput="updateClosePreview()"></div>
+    </div>
+    <div><label class="field-label">Notes</label><input id="close-notes" style="margin-bottom:12px"></div>
+    <div id="close-preview" class="close-preview hidden"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-default" onclick="closeCloseModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmClosePosition()">Close Position → Trades</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -387,7 +412,7 @@ function render() {
       const er=eq.cur?(r$/eq.cur)*100:0;
       const days=p.entryDate?Math.floor((Date.now()-new Date(p.entryDate).getTime())/864e5):0;
       const ed=p.earningsDate?Math.ceil((new Date(p.earningsDate)-Date.now())/864e5):null;
-      return `<tr class="clickable" onclick="editPos(${p.id})"><td style="font-weight:700;color:#e2e8f0">${p.ticker}</td><td style="color:#94a3b8">${fmt(p.entryPrice)}</td><td>${fmt(p.currentPrice)}</td><td style="color:#94a3b8">${fmt(p.currentStop)}</td><td style="color:#64748b">${p.shares}</td><td style="font-weight:600;color:${up>=0?"#10b981":"#ef4444"}">${fmt(up,1)}%</td><td style="color:${u$>=0?"#10b981":"#ef4444"}">${fmtD(u$)}</td><td style="color:#94a3b8">${fmtD(r$)}</td><td style="color:${er>2?"#ef4444":"#94a3b8"};font-weight:${er>2?700:400}">${fmt(er,1)}%</td><td style="color:#64748b">${p.sector}</td><td style="color:#64748b">${days}d</td><td style="color:${ed!==null&&ed<=2?"#ef4444":ed!==null&&ed<=5?"#f59e0b":"#64748b"};font-weight:${ed!==null&&ed<=5?700:400}">${ed!==null?ed+"d":"—"}</td><td><button class="delete-btn" onclick="event.stopPropagation();deletePos(${p.id})">×</button></td></tr>`;
+      return `<tr class="clickable" onclick="editPos(${p.id})"><td style="font-weight:700;color:#e2e8f0">${p.ticker}</td><td style="color:#94a3b8">${fmt(p.entryPrice)}</td><td>${fmt(p.currentPrice)}</td><td style="color:#94a3b8">${fmt(p.currentStop)}</td><td style="color:#64748b">${p.shares}</td><td style="font-weight:600;color:${up>=0?"#10b981":"#ef4444"}">${fmt(up,1)}%</td><td style="color:${u$>=0?"#10b981":"#ef4444"}">${fmtD(u$)}</td><td style="color:#94a3b8">${fmtD(r$)}</td><td style="color:${er>2?"#ef4444":"#94a3b8"};font-weight:${er>2?700:400}">${fmt(er,1)}%</td><td style="color:#64748b">${p.sector}</td><td style="color:#64748b">${days}d</td><td style="color:${ed!==null&&ed<=2?"#ef4444":ed!==null&&ed<=5?"#f59e0b":"#64748b"};font-weight:${ed!==null&&ed<=5?700:400}">${ed!==null?ed+"d":"—"}</td><td><button class="close-pos-btn" onclick="event.stopPropagation();openCloseModal(${p.id})">Close</button></td><td><button class="delete-btn" onclick="event.stopPropagation();deletePos(${p.id})">×</button></td></tr>`;
     }).join("");
   } else { document.getElementById("pos-empty").classList.remove("hidden"); pt.innerHTML=""; }
 
@@ -593,6 +618,81 @@ function editPos(id) {
   document.getElementById("pos-form-container").classList.remove("hidden");
 }
 function deletePos(id) { positions=positions.filter(p=>p.id!==id); save(); render(); }
+
+// ── CLOSE POSITION → TRADE ──
+let closingPosId = null;
+
+function openCloseModal(id) {
+  const p = positions.find(pos => pos.id === id);
+  if (!p) return;
+  closingPosId = id;
+  document.getElementById("close-modal-title").textContent = "Close " + p.ticker;
+  document.getElementById("close-modal-info").innerHTML =
+    `Entry: <b>$${fmt(p.entryPrice)}</b> · Stop: <b>$${fmt(p.currentStop)}</b> · Shares: <b>${p.shares}</b> · Setup: ${p.setupType} · Tier ${p.tier}`;
+  document.getElementById("close-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("close-price").value = p.currentPrice || "";
+  document.getElementById("close-notes").value = "";
+  updateClosePreview();
+  document.getElementById("close-modal").classList.add("open");
+}
+
+function closeCloseModal() {
+  closingPosId = null;
+  document.getElementById("close-modal").classList.remove("open");
+}
+
+function updateClosePreview() {
+  const p = positions.find(pos => pos.id === closingPosId);
+  if (!p) return;
+  const exitPrice = Number(document.getElementById("close-price").value);
+  const prev = document.getElementById("close-preview");
+  if (exitPrice > 0) {
+    const risk = p.entryPrice - p.currentStop;
+    const r = risk ? (exitPrice - p.entryPrice) / risk : 0;
+    const pl = (exitPrice - p.entryPrice) * p.shares;
+    const pct = p.entryPrice ? ((exitPrice - p.entryPrice) / p.entryPrice) * 100 : 0;
+    prev.classList.remove("hidden");
+    prev.innerHTML = `R: <b style="color:${r>=0?"#10b981":"#ef4444"}">${r>=0?"+":""}${fmt(r)}</b> &nbsp; P&L: <b style="color:${pl>=0?"#10b981":"#ef4444"}">${fmtD(pl)}</b> &nbsp; %: <b style="color:${pct>=0?"#10b981":"#ef4444"}">${fmtP(pct)}</b>`;
+  } else {
+    prev.classList.add("hidden");
+  }
+}
+
+function confirmClosePosition() {
+  const p = positions.find(pos => pos.id === closingPosId);
+  if (!p) return;
+  const exitDate = document.getElementById("close-date").value;
+  const exitPrice = Number(document.getElementById("close-price").value);
+  const notes = document.getElementById("close-notes").value;
+  if (!exitPrice || !exitDate) { alert("Exit date and exit price are required."); return; }
+
+  // Create the closed trade from the position's data
+  const trade = {
+    id: Date.now(),
+    dateEntered: p.entryDate || "",
+    dateExited: exitDate,
+    ticker: p.ticker,
+    setupType: p.setupType || "Cat A",
+    tier: Number(p.tier) || 1,
+    entryPrice: p.entryPrice,
+    stopPrice: p.currentStop,
+    exitPrice: exitPrice,
+    shares: p.shares,
+    regime: config.regime,
+    notes: notes,
+  };
+  trades.push(trade);
+
+  // Remove the position
+  positions = positions.filter(pos => pos.id !== closingPosId);
+
+  save();
+  closeCloseModal();
+  render();
+
+  // Switch to the Trades tab so the user sees their new closed trade
+  switchTab("log");
+}
 
 // ── FINNHUB API ──
 async function refreshPrices() {
