@@ -88,6 +88,7 @@
     <div><label class="field-label">Market Stage</label><select id="cfg-stage" onchange="saveConfig()"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
     <div><label class="field-label">Target Positions</label><input type="number" id="cfg-positions" min="5" max="8" onchange="saveConfig()"></div>
     <div><label class="field-label">Regime Start</label><input type="date" id="cfg-regime-start" onchange="saveConfig()"></div>
+    <div style="min-width:220px"><label class="field-label">Finnhub API Key</label><input type="password" id="cfg-finnhub" placeholder="paste key from finnhub.io" onchange="saveConfig()" style="font-family:'SF Mono',monospace;font-size:11px;letter-spacing:1px"></div>
     <div style="display:flex;gap:6px;padding-bottom:2px;flex-wrap:wrap;align-items:flex-end">
       <button class="btn btn-sm btn-default" onclick="exportTradesCSV()">↓ Trades CSV</button>
       <button class="btn btn-sm btn-default" onclick="exportFullBackup()">↓ Full Backup</button>
@@ -146,7 +147,11 @@
   <div id="tab-positions" class="tab-content">
     <div class="grid grid-auto" id="pos-metrics"></div>
     <div id="pos-sectors" class="panel hidden"><div class="stat-label" style="margin-bottom:8px">Sector Exposure</div><div id="pos-sectors-chips" style="display:flex;gap:16px;flex-wrap:wrap"></div></div>
-    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="togglePosForm()">+ Add Position</button></div>
+    <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" onclick="togglePosForm()">+ Add Position</button>
+      <button class="btn btn-default" id="refresh-prices-btn" onclick="refreshPrices()">↻ Refresh Prices</button>
+      <span id="refresh-status" style="font-size:11px;color:#64748b"></span>
+    </div>
     <div id="pos-form-container" class="panel hidden">
       <div class="form-grid">
         <div><label class="field-label">Ticker</label><input id="pf-ticker" oninput="this.value=this.value.toUpperCase()"></div>
@@ -206,7 +211,7 @@ let config, trades, positions, editingTradeId = null, editingPosId = null;
 let equityChart = null, monthlyChart = null;
 
 function load() {
-  config = JSON.parse(localStorage.getItem("ts-config") || "null") || {startingEquity:100000,regime:1,regimeStartDate:"",marketStage:2,targetPositions:6};
+  config = JSON.parse(localStorage.getItem("ts-config") || "null") || {startingEquity:100000,regime:1,regimeStartDate:"",marketStage:2,targetPositions:6,finnhubKey:""};
   trades = JSON.parse(localStorage.getItem("ts-trades") || "[]");
   positions = JSON.parse(localStorage.getItem("ts-positions") || "[]");
 }
@@ -433,6 +438,7 @@ function render() {
   document.getElementById("cfg-stage").value=config.marketStage;
   document.getElementById("cfg-positions").value=config.targetPositions;
   document.getElementById("cfg-regime-start").value=config.regimeStartDate||"";
+  document.getElementById("cfg-finnhub").value=config.finnhubKey||"";
 }
 
 function renderCharts(eq) {
@@ -468,6 +474,7 @@ function saveConfig() {
   config.marketStage=Number(document.getElementById("cfg-stage").value);
   config.targetPositions=Number(document.getElementById("cfg-positions").value)||6;
   config.regimeStartDate=document.getElementById("cfg-regime-start").value;
+  config.finnhubKey=(document.getElementById("cfg-finnhub").value||"").trim();
   save();render();
 }
 
@@ -586,6 +593,66 @@ function editPos(id) {
   document.getElementById("pos-form-container").classList.remove("hidden");
 }
 function deletePos(id) { positions=positions.filter(p=>p.id!==id); save(); render(); }
+
+// ── FINNHUB API ──
+async function refreshPrices() {
+  if(!config.finnhubKey) {
+    alert("No Finnhub API key. Open ⚙ Config and paste your key from finnhub.io (free tier).");
+    return;
+  }
+  if(!positions.length) {
+    alert("No open positions to refresh.");
+    return;
+  }
+  const btn = document.getElementById("refresh-prices-btn");
+  const status = document.getElementById("refresh-status");
+  btn.disabled = true;
+  btn.textContent = "↻ Fetching…";
+  status.textContent = "";
+  status.style.color = "#64748b";
+
+  const tickers = [...new Set(positions.map(p => p.ticker))];
+  let updated = 0, failed = [];
+
+  // Finnhub free tier: 60 calls/min — fetch sequentially with small delay
+  for (let i = 0; i < tickers.length; i++) {
+    const sym = tickers[i];
+    status.textContent = `${i+1}/${tickers.length}: ${sym}…`;
+    try {
+      const resp = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${config.finnhubKey}`);
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      // data.c = current price, data.pc = previous close
+      if (data.c && data.c > 0) {
+        positions.forEach(p => {
+          if (p.ticker === sym) p.currentPrice = data.c;
+        });
+        updated++;
+      } else {
+        failed.push(sym + " (no data)");
+      }
+    } catch (err) {
+      failed.push(sym + " (" + err.message + ")");
+    }
+    // Brief pause between calls to respect rate limit
+    if (i < tickers.length - 1) await new Promise(r => setTimeout(r, 150));
+  }
+
+  save();
+  render();
+
+  btn.disabled = false;
+  btn.textContent = "↻ Refresh Prices";
+  const now = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  if (failed.length) {
+    status.textContent = `${updated} updated, ${failed.length} failed at ${now}`;
+    status.style.color = "#f59e0b";
+    console.warn("Refresh failures:", failed);
+  } else {
+    status.textContent = `${updated} updated at ${now}`;
+    status.style.color = "#10b981";
+  }
+}
 
 // ── IMPORT/EXPORT ──
 function exportTradesCSV() {
