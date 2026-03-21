@@ -25,7 +25,7 @@ echo "Press Ctrl+C to stop the server."
 echo ""
 
 # Start the server in the background
-python3 -m http.server $PORT &
+python3 server.py $PORT &
 SERVER_PID=$!
 
 # Wait until the server is actually responding before opening the browser
