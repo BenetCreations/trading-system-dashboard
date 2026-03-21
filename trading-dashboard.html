@@ -67,6 +67,14 @@
   .modal .close-preview { font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; padding: 8px 12px; background: #0a0e17; border-radius: 6px; margin-bottom: 14px; }
   .close-pos-btn { background: none; border: 1px solid #f59e0b44; color: #f59e0b; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; }
   .close-pos-btn:hover { background: #f59e0b22; }
+  .atr-band { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace; }
+  .atr-green { background: #10b98122; color: #10b981; border: 1px solid #10b98144; }
+  .atr-yellow { background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b44; }
+  .atr-orange { background: #f9731622; color: #f97316; border: 1px solid #f9731644; }
+  .atr-red { background: #ef444422; color: #ef4444; border: 1px solid #ef444444; }
+  .atr-bar-track { height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; min-width: 80px; }
+  .atr-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .backtest-results { max-height: 300px; overflow-y: auto; }
 </style>
 </head>
 <body>
@@ -86,7 +94,7 @@
     <div class="stat"><div class="stat-label">Open Risk</div><div class="stat-value" id="s-risk">0.00%</div></div>
     <div class="stat"><div class="stat-label">Regime</div><div class="stat-value" id="s-regime">1</div><div class="stat-sub" id="s-kelly-status">Progressive</div></div>
     <div class="stat"><div class="stat-label">Rule 4</div><div class="stat-value" id="s-rule4" style="color:#3b82f6">8.00%</div><div class="stat-sub" id="s-rule4-window">cold-start</div></div>
-    <div id="s-alerts-badge" class="hidden" style="display:flex;align-items:center;gap:4px;margin-left:auto"><span style="font-size:14px">⚠</span><span id="s-alerts-count" style="font-size:11px;font-weight:600"></span></div>
+    <div id="s-alerts-badge" style="display:none;align-items:center;gap:4px;margin-left:auto"><span style="font-size:14px">⚠</span><span id="s-alerts-count" style="font-size:11px;font-weight:600"></span></div>
     <button class="btn btn-sm btn-ghost" onclick="toggleConfig()" style="margin-left:auto">⚙ Config</button>
   </div>
   <div id="config-panel" class="config-panel panel">
@@ -144,7 +152,10 @@
       </div>
       <div style="margin-bottom:10px"><label class="field-label">Notes</label><input id="tf-notes"></div>
       <div id="trade-preview" class="preview-bar hidden"></div>
-      <button class="btn btn-primary" onclick="submitTrade()" id="trade-submit-btn">Save Trade</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="submitTrade()" id="trade-submit-btn">Save Trade</button>
+        <button class="btn btn-default" onclick="cancelTradeForm()">Cancel</button>
+      </div>
     </div>
     <div style="overflow-x:auto"><table><thead><tr><th>Exit</th><th>Ticker</th><th>Setup</th><th>T</th><th>Entry</th><th>Stop</th><th>Exit$</th><th>R</th><th>Cum R</th><th>P&L</th><th>%</th><th>Reg</th><th></th></tr></thead><tbody id="trade-table"></tbody></table></div>
     <div id="trade-empty" class="empty-state">No closed trades yet. Log your first trade above.</div>
@@ -173,7 +184,10 @@
         <div><label class="field-label">Tier</label><select id="pf-tier"></select></div>
         <div><label class="field-label">Earnings Date</label><input type="date" id="pf-earnings"></div>
       </div>
-      <button class="btn btn-primary" onclick="submitPosition()" id="pos-submit-btn">Save Position</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="submitPosition()" id="pos-submit-btn">Save Position</button>
+        <button class="btn btn-default" onclick="cancelPosForm()">Cancel</button>
+      </div>
     </div>
     <div style="overflow-x:auto"><table><thead><tr><th>Ticker</th><th>Entry</th><th>Current</th><th>Stop</th><th>Shares</th><th>Unrl%</th><th>Unrl$</th><th>Risk$</th><th>EqRisk</th><th>Sector</th><th>Days</th><th>Earn</th><th></th><th></th></tr></thead><tbody id="pos-table"></tbody></table></div>
     <div id="pos-empty" class="empty-state">No open positions. Add your first above.</div>
@@ -185,7 +199,6 @@
     <div class="panel"><div class="stat-label" style="margin-bottom:6px">Drawdown Status</div><div class="dd-bands" id="dd-bands"></div><div id="dd-text" class="mono" style="font-size:12px"></div></div>
     <div class="panel"><div class="stat-label" style="margin-bottom:10px">Equity Curve</div><div class="chart-container"><canvas id="equity-chart"></canvas></div></div>
     <div class="panel"><div class="stat-label" style="margin-bottom:10px">Monthly P&L</div><div class="chart-container chart-container-sm"><canvas id="monthly-chart"></canvas></div></div>
-    <div id="elder-rule" class="panel hidden"></div>
   </div>
 
   <!-- KELLY -->
@@ -201,8 +214,50 @@
   <!-- ATR -->
   <div id="tab-atr" class="tab-content">
     <div class="panel">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:16px;font-weight:700">ATR Extension Monitor</span><span class="badge" style="background:#64748b22;color:#64748b;border:1px solid #64748b44">Tier 3</span></div>
-      <div class="empty-state"><div style="font-size:14px;margin-bottom:8px">Coming in Tier 3 build</div><div style="font-size:12px">ATR% multiple from 21 EMA with backtest calibration for the 7+ threshold.</div></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:16px;font-weight:700">ATR Extension Monitor</span>
+        <span class="badge" style="background:#3b82f622;color:#3b82f6;border:1px solid #3b82f644">Tool 5</span>
+      </div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:14px">Per-position ATR% extension from 21 EMA · Sell signal at 7+ ATR multiples (Rule 4B)</div>
+      <div style="margin-bottom:14px;display:flex;gap:8px;align-items:center">
+        <button class="btn btn-default" id="refresh-atr-btn" onclick="refreshATR()">↻ Refresh ATR Data</button>
+        <span id="atr-refresh-status" style="font-size:11px;color:#64748b"></span>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <div class="atr-band atr-green">0–3 OK</div>
+        <div class="atr-band atr-yellow">3–5 Watch</div>
+        <div class="atr-band atr-orange">5–7 Aware</div>
+        <div class="atr-band atr-red">7+ Sell Signal</div>
+      </div>
+      <div id="atr-alerts" style="margin-bottom:12px"></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Ticker</th><th>Price</th><th>21 EMA</th><th>ATR(14)</th><th>ATR%</th><th>Ext%</th><th>ATR Mult</th><th>Band</th><th style="min-width:90px">Visual</th></tr></thead>
+          <tbody id="atr-table"></tbody>
+        </table>
+      </div>
+      <div id="atr-empty" class="empty-state">No ATR data yet. Add open positions and click "Refresh ATR Data".</div>
+    </div>
+
+    <!-- BACKTEST -->
+    <div class="panel" style="margin-top:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:15px;font-weight:700">ATR Backtest</span>
+      </div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:14px">Test a historical ticker to see max ATR extension before reversal — calibrate your 7+ threshold</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:12px">
+        <div><label class="field-label">Ticker</label><input id="bt-ticker" oninput="this.value=this.value.toUpperCase()"></div>
+        <div><label class="field-label">Start Date</label><input type="date" id="bt-start"></div>
+        <div><label class="field-label">End Date</label><input type="date" id="bt-end"></div>
+        <div><label class="field-label">Reset Threshold</label><input type="number" step="0.5" min="0.5" max="5" id="bt-reset" value="2" style="width:100%"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" id="bt-run-btn" onclick="runBacktest()">Run Backtest</button></div>
+      </div>
+      <div id="bt-status" style="font-size:11px;color:#64748b;margin-bottom:8px"></div>
+      <div id="bt-results" class="hidden">
+        <div class="grid grid-auto" id="bt-metrics" style="margin-bottom:12px"></div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px">ATR Multiple Distribution (max extension per wave — new wave starts when mult drops below reset threshold)</div>
+        <div id="bt-distribution" class="backtest-results"></div>
+      </div>
     </div>
   </div>
 
@@ -349,8 +404,8 @@ function render() {
   if(Math.abs(eq.dd)>=5)allAlerts.push({type:"danger",msg:"Drawdown: "+fmt(eq.dd)+"%"});
   else if(Math.abs(eq.dd)>=3)allAlerts.push({type:"warning",msg:"Drawdown: "+fmt(eq.dd)+"%"});
   const ab=document.getElementById("alert-bar"),sb=document.getElementById("s-alerts-badge");
-  if(allAlerts.length){ab.classList.remove("hidden");ab.innerHTML=allAlerts.map(a=>`<span class="alert-item alert-${a.type}">⚠ ${a.msg}</span>`).join("");sb.classList.remove("hidden");sb.style.display="flex";document.getElementById("s-alerts-count").textContent=allAlerts.length+" alert"+(allAlerts.length>1?"s":"");document.getElementById("s-alerts-count").style.color=allAlerts.some(a=>a.type==="danger")?"#ef4444":"#f59e0b";}
-  else{ab.classList.add("hidden");sb.classList.add("hidden");sb.style.display="none";}
+  if(allAlerts.length){ab.classList.remove("hidden");ab.innerHTML=allAlerts.map(a=>`<span class="alert-item alert-${a.type}">⚠ ${a.msg}</span>`).join("");sb.style.display="flex";document.getElementById("s-alerts-count").textContent=allAlerts.length+" alert"+(allAlerts.length>1?"s":"");document.getElementById("s-alerts-count").style.color=allAlerts.some(a=>a.type==="danger")?"#ef4444":"#f59e0b";}
+  else{ab.classList.add("hidden");sb.style.display="none";}
 
   // Trade metrics
   document.getElementById("trade-metrics").innerHTML=[
@@ -429,11 +484,6 @@ function render() {
   document.getElementById("dd-bands").innerHTML=bands.map((b,i)=>{const prev=i===0?0:[3,5,7,8,10][i-1];const active=abd>=prev&&abd<b.max;const past=abd>=b.max;return `<div class="dd-band" style="background:${past?b.color+"cc":active?b.color:b.color+"22"};color:${past||active?"#fff":"#64748b"}">${b.label}</div>`;}).join("");
   document.getElementById("dd-text").innerHTML=`<span style="color:${ddColor(eq.dd)}">${fmt(abd)}% from peak</span>`;
 
-  // Elder's rule
-  const er=document.getElementById("elder-rule");
-  if(config.regime===2){er.classList.remove("hidden");er.innerHTML=`<div class="stat-label" style="margin-bottom:4px">Elder's 6% Rule (Regime 2 Only)</div><div class="mono" style="font-size:13px;color:#94a3b8">Track monthly cumulative losses against 6% threshold</div>`;}
-  else er.classList.add("hidden");
-
   renderCharts(eq);
 
   // Kelly
@@ -454,8 +504,8 @@ function render() {
   const ct=trades.filter(t=>Number(t.regime)===config.regime).length;
   const ks=ct<10?"Silent":ct<=12?"Informational":ct<=15?"Partial":ct<=20?"Primary":"Full Control";
   document.getElementById("regime-content").innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="font-size:16px;font-weight:700">Regime Tracker</span><span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">Tier 2</span></div>
-  <div class="grid grid-auto">${statHTML("Regime",config.regime)}${statHTML("Market Stage",config.marketStage)}${statHTML("Trades in Regime",ct)}${statHTML("Kelly Status",ks)}${statHTML("Margin",config.marketStage===2?"Permitted":"Blocked",config.marketStage===2?"#10b981":"#ef4444")}${statHTML("Elder's 6%",config.regime===2?"Active":"Suspended",config.regime===2?"#f59e0b":"#64748b")}</div>
-  ${config.regime===1?'<div style="margin-top:12px;padding:10px;background:#0f172a;border-radius:6px;border:1px solid #1e293b;font-size:12px;color:#94a3b8">Regime 1: Daily failed entry limit = 3. Sector cap = 35%. Elder\'s 6% suspended.</div>':''}`;
+  <div class="grid grid-auto">${statHTML("Regime",config.regime)}${statHTML("Market Stage",config.marketStage)}${statHTML("Trades in Regime",ct)}${statHTML("Kelly Status",ks)}${statHTML("Margin",config.marketStage===2?"Permitted":"Blocked",config.marketStage===2?"#10b981":"#ef4444")}</div>
+  ${config.regime===1?'<div style="margin-top:12px;padding:10px;background:#0f172a;border-radius:6px;border:1px solid #1e293b;font-size:12px;color:#94a3b8">Regime 1: Daily failed entry limit = 3. Sector cap = 35%.</div>':''}`;
 
   // Config fields
   document.getElementById("cfg-equity").value=config.startingEquity;
@@ -505,8 +555,12 @@ function saveConfig() {
 
 function toggleTradeForm() {
   const c=document.getElementById("trade-form-container");
-  c.classList.toggle("hidden");
-  if(!c.classList.contains("hidden")&&!editingTradeId) clearTradeForm();
+  if(c.classList.contains("hidden")) { clearTradeForm(); c.classList.remove("hidden"); }
+  else { c.classList.add("hidden"); clearTradeForm(); }
+}
+function cancelTradeForm() {
+  document.getElementById("trade-form-container").classList.add("hidden");
+  clearTradeForm();
 }
 function clearTradeForm() {
   editingTradeId=null;
@@ -568,8 +622,12 @@ function deleteTrade(id) { trades=trades.filter(t=>t.id!==id); save(); render();
 
 function togglePosForm() {
   const c=document.getElementById("pos-form-container");
-  c.classList.toggle("hidden");
-  if(!c.classList.contains("hidden")&&!editingPosId) clearPosForm();
+  if(c.classList.contains("hidden")) { clearPosForm(); c.classList.remove("hidden"); }
+  else { c.classList.add("hidden"); clearPosForm(); }
+}
+function cancelPosForm() {
+  document.getElementById("pos-form-container").classList.add("hidden");
+  clearPosForm();
 }
 function clearPosForm() {
   editingPosId=null;
@@ -692,6 +750,282 @@ function confirmClosePosition() {
 
   // Switch to the Trades tab so the user sees their new closed trade
   switchTab("log");
+}
+
+// ── ATR CALCULATIONS ──
+function calcATRFromCandles(candles) {
+  // candles = array of {h, l, c, o} sorted oldest→newest
+  if (candles.length < 15) return null; // need 14+1 for ATR(14)
+  const trs = [];
+  for (let i = 1; i < candles.length; i++) {
+    const h = candles[i].h, l = candles[i].l, pc = candles[i-1].c;
+    trs.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  // Simple moving average for initial ATR, then EMA-style smoothing
+  let atr = trs.slice(0, 14).reduce((s, v) => s + v, 0) / 14;
+  for (let i = 14; i < trs.length; i++) {
+    atr = (atr * 13 + trs[i]) / 14;
+  }
+  return atr;
+}
+
+function calcEMA21FromCandles(candles) {
+  // candles = array of {c} sorted oldest→newest
+  if (candles.length < 21) return null;
+  const k = 2 / (21 + 1); // smoothing factor
+  // SMA of first 21 closes as seed
+  let ema = candles.slice(0, 21).reduce((s, c) => s + c.c, 0) / 21;
+  for (let i = 21; i < candles.length; i++) {
+    ema = candles[i].c * k + ema * (1 - k);
+  }
+  return ema;
+}
+
+function atrBandInfo(mult) {
+  const m = Math.abs(mult);
+  if (m < 3) return { cls: "atr-green", label: "OK", color: "#10b981" };
+  if (m < 5) return { cls: "atr-yellow", label: "Watch", color: "#f59e0b" };
+  if (m < 7) return { cls: "atr-orange", label: "Aware", color: "#f97316" };
+  return { cls: "atr-red", label: "SELL", color: "#ef4444" };
+}
+
+async function fetchCandles(symbol, fromUnix, toUnix) {
+  // Uses local proxy server → Yahoo Finance (no API key needed, all tickers supported)
+  const url = `/api/candles?symbol=${encodeURIComponent(symbol)}&from=${fromUnix}&to=${toUnix}`;
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    throw new Error(data.error || "HTTP " + resp.status);
+  }
+  const data = await resp.json();
+  if (data.s !== "ok" || !data.c || !data.c.length) throw new Error("no candle data returned");
+  return data.c.map((c, i) => ({ o: data.o[i], h: data.h[i], l: data.l[i], c, t: data.t[i] }));
+}
+
+async function refreshATR() {
+  if (!positions.length) {
+    alert("No open positions to analyze.");
+    return;
+  }
+  const btn = document.getElementById("refresh-atr-btn");
+  const status = document.getElementById("atr-refresh-status");
+  btn.disabled = true;
+  btn.textContent = "↻ Fetching…";
+  status.textContent = "";
+
+  const tickers = [...new Set(positions.map(p => p.ticker))];
+  const now = Math.floor(Date.now() / 1000);
+  const from = now - 90 * 86400; // 90 days back for enough data
+  const results = [];
+  const alerts = [];
+  let failed = [];
+
+  for (let i = 0; i < tickers.length; i++) {
+    const sym = tickers[i];
+    status.textContent = `${i+1}/${tickers.length}: ${sym}…`;
+    try {
+      const candles = await fetchCandles(sym, from, now);
+      const atr = calcATRFromCandles(candles);
+      const ema21 = calcEMA21FromCandles(candles);
+      const curPrice = candles[candles.length - 1].c;
+      if (atr && ema21) {
+        const atrPct = (atr / curPrice) * 100;
+        const extPct = ((curPrice - ema21) / ema21) * 100;
+        const atrMult = atrPct > 0 ? extPct / atrPct : 0;
+        const band = atrBandInfo(atrMult);
+        results.push({ sym, curPrice, ema21, atr, atrPct, extPct, atrMult, band });
+        if (Math.abs(atrMult) >= 7) {
+          alerts.push({ type: "danger", msg: `${sym}: ATR mult ${fmt(atrMult)}× — SELL SIGNAL (Rule 4B)` });
+        } else if (Math.abs(atrMult) >= 5) {
+          alerts.push({ type: "warning", msg: `${sym}: ATR mult ${fmt(atrMult)}× — extended, watch closely` });
+        }
+      } else {
+        failed.push(sym + " (insufficient data)");
+      }
+    } catch (err) {
+      failed.push(sym + " (" + err.message + ")");
+    }
+    if (i < tickers.length - 1) await new Promise(r => setTimeout(r, 200));
+  }
+
+  // Render results
+  const tbody = document.getElementById("atr-table");
+  const empty = document.getElementById("atr-empty");
+  const alertDiv = document.getElementById("atr-alerts");
+
+  if (results.length) {
+    empty.classList.add("hidden");
+    // Sort by ATR mult descending (most extended first)
+    results.sort((a, b) => Math.abs(b.atrMult) - Math.abs(a.atrMult));
+    tbody.innerHTML = results.map(r => {
+      const barWidth = Math.min(Math.abs(r.atrMult) / 10 * 100, 100);
+      return `<tr>
+        <td style="font-weight:700;color:#e2e8f0">${r.sym}</td>
+        <td style="color:#94a3b8">${fmt(r.curPrice)}</td>
+        <td style="color:#94a3b8">${fmt(r.ema21)}</td>
+        <td style="color:#94a3b8">${fmt(r.atr)}</td>
+        <td style="color:#94a3b8">${fmt(r.atrPct)}%</td>
+        <td style="color:${r.extPct>=0?"#10b981":"#ef4444"}">${r.extPct>=0?"+":""}${fmt(r.extPct)}%</td>
+        <td style="font-weight:700;color:${r.band.color}">${fmt(r.atrMult)}×</td>
+        <td><span class="atr-band ${r.band.cls}">${r.band.label}</span></td>
+        <td><div class="atr-bar-track"><div class="atr-bar-fill" style="width:${barWidth}%;background:${r.band.color}"></div></div></td>
+      </tr>`;
+    }).join("");
+  } else {
+    empty.classList.remove("hidden");
+    tbody.innerHTML = "";
+  }
+
+  // Render alerts
+  if (alerts.length) {
+    alertDiv.innerHTML = alerts.map(a =>
+      `<div style="padding:4px 10px;margin-bottom:4px;border-radius:4px;font-size:12px;background:${a.type==="danger"?"#ef444415":"#f59e0b15"};color:${a.type==="danger"?"#ef4444":"#f59e0b"};border:1px solid ${a.type==="danger"?"#ef444433":"#f59e0b33"}">⚠ ${a.msg}</div>`
+    ).join("");
+  } else {
+    alertDiv.innerHTML = "";
+  }
+
+  btn.disabled = false;
+  btn.textContent = "↻ Refresh ATR Data";
+  const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (failed.length) {
+    status.textContent = `${results.length} analyzed, ${failed.length} failed at ${nowTime}`;
+    status.style.color = "#f59e0b";
+    console.warn("ATR failures:", failed);
+  } else {
+    status.textContent = `${results.length} analyzed at ${nowTime}`;
+    status.style.color = "#10b981";
+  }
+}
+
+// ── ATR BACKTEST ──
+async function runBacktest() {
+  const sym = document.getElementById("bt-ticker").value.trim().toUpperCase();
+  const startDate = document.getElementById("bt-start").value;
+  const endDate = document.getElementById("bt-end").value;
+  if (!sym || !startDate || !endDate) { alert("Enter ticker, start date, and end date."); return; }
+
+  const btn = document.getElementById("bt-run-btn");
+  const status = document.getElementById("bt-status");
+  const resultsDiv = document.getElementById("bt-results");
+  btn.disabled = true;
+  btn.textContent = "Running…";
+  status.textContent = "Fetching candle data for " + sym + "…";
+  status.style.color = "#64748b";
+  resultsDiv.classList.add("hidden");
+
+  try {
+    // Fetch extra 30 days before start for EMA/ATR warmup
+    const warmupDays = 60;
+    const fromUnix = Math.floor(new Date(startDate).getTime() / 1000) - warmupDays * 86400;
+    const toUnix = Math.floor(new Date(endDate).getTime() / 1000) + 86400;
+    const candles = await fetchCandles(sym, fromUnix, toUnix);
+
+    if (candles.length < 30) throw new Error("Not enough candle data returned");
+
+    status.textContent = "Calculating ATR extensions…";
+
+    // Calculate rolling ATR mult for each day
+    const dailyMults = [];
+    for (let i = 21; i < candles.length; i++) {
+      const slice = candles.slice(0, i + 1);
+      const atr = calcATRFromCandles(slice);
+      const ema = calcEMA21FromCandles(slice);
+      if (atr && ema) {
+        const price = slice[slice.length - 1].c;
+        const atrPct = atr / price * 100;
+        const extPct = (price - ema) / ema * 100;
+        const mult = atrPct > 0 ? extPct / atrPct : 0;
+        const date = new Date(candles[i].t * 1000).toISOString().slice(0, 10);
+        dailyMults.push({ date, price, mult, atr, ema });
+      }
+    }
+
+    // Find only days within the actual requested date range
+    const inRange = dailyMults.filter(d => d.date >= startDate && d.date <= endDate);
+    if (!inRange.length) throw new Error("No data in the specified date range");
+
+    // Find peak extensions using reset threshold method
+    // Tracks the max ATR mult during each extension wave
+    // A new wave starts only after the mult drops below the reset threshold
+    const resetThreshold = Number(document.getElementById("bt-reset").value) || 2;
+    const peaks = [];
+    let tracking = false, currentPeak = null;
+    for (const d of inRange) {
+      if (!tracking && d.mult > resetThreshold) {
+        tracking = true;
+        currentPeak = d;
+      } else if (tracking) {
+        if (d.mult > currentPeak.mult) currentPeak = d;
+        if (d.mult < resetThreshold) {
+          peaks.push(currentPeak);
+          tracking = false;
+          currentPeak = null;
+        }
+      }
+    }
+    // Capture any in-progress wave at the end of the range
+    if (tracking && currentPeak) peaks.push(currentPeak);
+
+    // Distribution buckets
+    const buckets = [
+      { label: "0–1×", min: 0, max: 1, count: 0 },
+      { label: "1–2×", min: 1, max: 2, count: 0 },
+      { label: "2–3×", min: 2, max: 3, count: 0 },
+      { label: "3–5×", min: 3, max: 5, count: 0 },
+      { label: "5–7×", min: 5, max: 7, count: 0 },
+      { label: "7–10×", min: 7, max: 10, count: 0 },
+      { label: "10+×", min: 10, max: 999, count: 0 },
+    ];
+    peaks.forEach(p => {
+      const b = buckets.find(b => p.mult >= b.min && p.mult < b.max);
+      if (b) b.count++;
+    });
+    const maxCount = Math.max(...buckets.map(b => b.count), 1);
+
+    // Stats
+    const peakMults = peaks.map(p => p.mult);
+    const maxMult = peakMults.length ? Math.max(...peakMults) : 0;
+    const avgMult = peakMults.length ? peakMults.reduce((s, v) => s + v, 0) / peakMults.length : 0;
+    const medianMult = peakMults.length ? peakMults.sort((a, b) => a - b)[Math.floor(peakMults.length / 2)] : 0;
+    const above7 = peakMults.filter(m => m >= 7).length;
+    const above7pct = peakMults.length ? (above7 / peakMults.length * 100) : 0;
+    const maxPeak = peaks.length ? peaks.reduce((a, b) => a.mult > b.mult ? a : b) : null;
+
+    // Render metrics
+    document.getElementById("bt-metrics").innerHTML = [
+      statHTML("Peak Extensions", peaks.length + " found", "#e2e8f0", inRange.length + " trading days"),
+      statHTML("Max ATR Mult", fmt(maxMult) + "×", maxMult >= 7 ? "#ef4444" : "#f59e0b", maxPeak ? maxPeak.date + " @ $" + fmt(maxPeak.price) : ""),
+      statHTML("Avg Peak", fmt(avgMult) + "×"),
+      statHTML("Median Peak", fmt(medianMult) + "×"),
+      statHTML("Peaks ≥ 7×", above7 + " (" + fmt(above7pct, 0) + "%)", above7 > 0 ? "#ef4444" : "#10b981", above7 > 0 ? "7+ threshold was hit" : "7+ threshold never hit"),
+    ].join("");
+
+    // Render distribution as horizontal bar chart
+    const distColors = ["#10b981", "#10b981", "#10b981", "#f59e0b", "#f97316", "#ef4444", "#ef4444"];
+    document.getElementById("bt-distribution").innerHTML = buckets.map((b, i) => {
+      const barW = maxCount > 0 ? (b.count / maxCount * 100) : 0;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+        <span class="mono" style="font-size:11px;color:#94a3b8;min-width:45px;text-align:right">${b.label}</span>
+        <div style="flex:1;height:18px;background:#1e293b;border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${barW}%;background:${distColors[i]};border-radius:3px;transition:width 0.3s"></div>
+        </div>
+        <span class="mono" style="font-size:11px;color:#e2e8f0;min-width:24px">${b.count}</span>
+      </div>`;
+    }).join("");
+
+    resultsDiv.classList.remove("hidden");
+    status.textContent = `Backtest complete: ${peaks.length} extension waves found in ${inRange.length} trading days (reset at ${resetThreshold}×)`;
+    status.style.color = "#10b981";
+
+  } catch (err) {
+    status.textContent = "Backtest failed: " + err.message;
+    status.style.color = "#ef4444";
+    console.error("Backtest error:", err);
+  }
+
+  btn.disabled = false;
+  btn.textContent = "Run Backtest";
 }
 
 // ── FINNHUB API ──
